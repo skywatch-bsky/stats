@@ -1,0 +1,23 @@
+project:
+  type: website
+
+website:
+  title: "skywatch-stats"
+  navbar:
+    left:
+      - href: index.qmd
+
+format:
+  html:
+    theme:
+      - cosmo
+      - brand
+    css: styles.css
+    toc: false
+    
+brand: _brand.yml
+
+execute: 
+  echo: false
+  warning: false
+  error: false

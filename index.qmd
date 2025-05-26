@@ -1,0 +1,181 @@
+---
+title: "Skywatch Statistics"
+date: today
+fig-format: png
+fig-dpi: 300
+---
+
+This page is a brief quick and dirty overview of the counts of labels emitted by [skywatch.blue](https://bsky.app/profile/skywatch.blue) on `{r} (Sys.Date() - 1)`.
+
+## Overall
+
+```{r}
+#| label: setup
+#| eval: true
+#| tidy: true
+#| include: false
+
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(gt)
+
+data <- readr::read_rds("all_labels.rds") |> 
+  dplyr::mutate(cts = lubridate::as_datetime(cts, tz = "UTC")) |>
+  dplyr::mutate(datehour = lubridate::floor_date(cts, "hour"),
+                hour = lubridate::hour(datehour),
+                date = lubridate::as_date(lubridate::floor_date(cts, "day")),
+                type = dplyr::if_else(stringr::str_detect(uri, "at://did"), "record", "repo"))
+
+labels <- unique(data$val) |> 
+  dplyr::intersect(c(
+  "alf",
+  "alt-tech",
+  "amplifier",
+  "automated-reply-guy",
+  "blue-heart-emoji",
+  "contains-slur",
+  "dehumanizing-rhetoric",
+  "disinformation-network",
+  "elon-musk",
+  "fringe-media",
+  "follow-farming",
+  "fundraising-link",
+  "hammer-sickle",
+  "inverted-red-triangle",
+  "low-quality-replies",
+  "maga-trump",
+  "nazi-symbolism",
+  "rmve-imve",
+  "sensual-alf",
+  "sports-betting",
+  "suspect-inauthentic",
+  "terf-gc",
+  "troll"
+))
+
+.total <- data |>
+  dplyr::distinct(val, date, uri, neg, .keep_all = TRUE) |>
+  dplyr::filter(is.na(neg)) |>
+  dplyr::filter(val %in% labels, date == (Sys.Date() - 1)) |>
+  dplyr::summarize(count = dplyr::n()) |> 
+  dplyr::pull()
+```
+
+::: {#tbl-label-counts .column-page-inset}
+```{r}
+data |>
+  dplyr::distinct(val, date, uri, neg, .keep_all = TRUE) |>
+  dplyr::filter(is.na(neg)) |>
+  dplyr::filter(val %in% labels, date == (Sys.Date() - 1)) |>
+  dplyr::summarize(count = dplyr::n(), .by = c("val", "date")) |> 
+  dplyr::mutate(percent = count/.total) |> 
+  dplyr::select(val, count, percent) |> 
+  dplyr::arrange(desc(count)) |> 
+  gt::gt(rowname_col = "val") |> 
+  gt::tab_stubhead("Label") |> 
+  gt::fmt_percent(columns = percent, decimals = 2) |> 
+  gt::fmt_integer(columns = count) |> 
+  gt::tab_options(table.width = pct(100)) |> 
+  gt::opt_table_font(font = google_font(name = "Atkinson Hyperlegible"), 
+                     size = pct(80))
+```
+
+Labels emitted by Skywatch on `{r} (Sys.Date() - 1)`
+:::
+
+::: {#tbl-label-counts-time .column-page-inset}
+```{r}
+data |> 
+  dplyr::distinct(val, cts, uri, neg, .keep_all = TRUE) |>
+  dplyr::filter(is.na(neg)) |>
+  dplyr::filter(val %in% labels) |>
+  dplyr::mutate(did = dplyr::if_else(type == "repo", uri, stringr::str_extract(uri, "did:plc:[a-z0-9]+"))) |> 
+  dplyr::summarise(count = dplyr::n(), .by = c("val", "hour")) |> 
+  tidyr::complete(hour, tidyr::nesting(val), fill = list(count = 0)) |> 
+  dplyr::arrange(hour) |> 
+  tidyr::pivot_wider(id_cols = hour, names_from = val, values_from = count) |> 
+  gt::gt(rowname_col = "hour") |> 
+  gt::tab_stubhead("Hour (UTC)") |> 
+  gt::tab_spanner("Labels", columns = c(labels)) |> 
+  gt::tab_options(table.width = pct(100)) |> 
+  gt::opt_table_font(font = google_font(name = "Atkinson Hyperlegible"), 
+                     size = pct(80))
+```
+
+Labels emitted by Skywatch on `{r} (Sys.Date() - 1)` by hour
+:::
+
+::: {#fig-labels-hour .column-page-inset}
+```{r}
+
+g <- data |>
+  dplyr::distinct(val, date, uri, neg, .keep_all = TRUE) |>
+  dplyr::filter(is.na(neg), val %in% labels, date == (Sys.Date() - 1)) |> 
+  dplyr::mutate(time = lubridate::floor_date(cts, "minute"),
+                time = as.POSIXct(time)) |>
+  dplyr::summarize(count = dplyr::n(), .by=c("val", "datehour")) |>
+  ggplot2::ggplot(ggplot2::aes(x = datehour, y = count, color = val)) +
+  ggplot2::geom_line() +
+  ggplot2::scale_x_datetime("Datetime (UTC)",
+                            date_breaks = "1 hour",
+                            date_labels = "%H:%M") +
+  ggplot2::scale_y_continuous("Labels Emitted", breaks = scales::breaks_extended(n =
+                                                                                   10)) +
+  ggplot2::scale_color_discrete("Labels") +
+  ggplot2::labs(title = glue::glue("Labels emitted per Hour (UTC) on {(Sys.Date() - 1)}"),
+                caption = "Source: @skywatch.blue") +
+  ggthemes::theme_clean(base_size = 9, base_family="Atkinson Hyperlegible") +
+  ggthemes::geom_rangeframe() +
+  ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
+                 legend.position="bottom",
+                 legend.text = ggplot2::element_text(size = 6),
+                 legend.title = ggplot2::element_text(size = 9),
+                 legend.spacing = unit(0.25, units = "char"))
+
+g
+```
+
+Labels emitted per Hour (UTC) on `{r} (Sys.Date() - 1)`.
+:::
+
+## By Label
+
+```{r}
+#| panel: tabset
+#| output: asis
+#| column: page
+
+tables <- data |> 
+  dplyr::distinct(val, date, uri, neg, .keep_all = TRUE) |>
+  dplyr::filter(is.na(neg), val %in% labels, date == (Sys.Date() - 1), type == "record") |>  
+  dplyr::mutate(did = dplyr::if_else(
+    type == "repo",
+    uri,
+    stringr::str_extract(uri, "did:plc:[a-z0-9]+")
+  )) |>
+  dplyr::summarise(count = dplyr::n(), .by = c("did", "val")) |> 
+  dplyr::summarise(unique_dids = dplyr::n(), .by=c("val", "count")) |> 
+  dplyr::select(val, unique_dids, count) |> 
+  dplyr::arrange(desc(count), val) |> 
+  dplyr::group_split(val) 
+
+for (table in seq_along(tables)) {
+  t_name <- unique(tables[[table]]$val)
+  
+  cat(sprintf("## %s\n", t_name))
+  cat(tables[[table]] |> 
+    gt::gt(rowname_col = "val") |> 
+    gt::tab_stubhead("Label") |> 
+    gt::tab_caption(glue::glue("Count of {t_name} labels emitted by count of unique DIDs")) |> 
+    gt::cols_label(
+    unique_dids = "Count of unique DIDs",
+    count = "Number of Labels Emitted"
+  ) |> 
+    gt::tab_options(table.width = pct(100)) |> 
+    gt::opt_table_font(font = google_font(name = "Atkinson Hyperlegible"), size = pct(80)) |> 
+    gt::as_raw_html())
+}
+
+```
